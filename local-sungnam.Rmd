@@ -218,13 +218,13 @@ sn_voting_count_overall_g <- sn_voting %>%
 
 sn_voting_count_overall_g
 
-ragg::agg_png("fig/sn_voting_count_overall_g", width = 297, height = 210, units = "mm", res = 300, scaling = 0.7)
+ragg::agg_png("fig/sn_voting_count_overall_g.png", width = 297, height = 210, units = "mm", res = 300, scaling = 0.7)
 sn_voting_count_overall_g
 dev.off()
 
 ```
 
-![](fig/sn_voting_count_overall_g)
+![](fig/sn_voting_count_overall_g.png)
 
 ### 3구 {#sn-votes-overall-three}
 
