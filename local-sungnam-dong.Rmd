@@ -33,6 +33,9 @@ library(tidyverse)
 library(rvest)
 library(lubridate)
 library(ggrepel)
+library(sf)
+library(geogrid)
+library(tilemaps)
 ```
 
 # 데이터 {#local-data}
@@ -65,18 +68,6 @@ dong_casting <- bd_casting_raw %>%
   ungroup() %>% 
   mutate(투표율 = 투표수 / 선거인수)
 
-dong_casting 
-
-```
-
-# 시각화 {#bundang}
-
-## 투표율 {#bundang-casting}
-
-
-```{r bundang-casting-overall, eval = FALSE}
-library(ggrepel)
-
 bundang_casting_total <- dong_casting %>% 
   group_by(연도) %>% 
   summarise(선거인수 = sum(선거인수),
@@ -93,6 +84,16 @@ dong_casting_tbl <- dong_casting %>%
                               str_detect(읍면동명, "부재자") ~ "거소선상/부재자",
                               TRUE ~ 읍면동명)) %>% 
   mutate(구시군명 = str_remove(구시군명, "성남시"))
+
+```
+
+# 시각화 {#bundang}
+
+## 투표율 {#bundang-casting}
+
+
+```{r bundang-casting-overall, eval = FALSE}
+library(ggrepel)
 
 
 dong_casting_g <- dong_casting_tbl %>% 
@@ -133,5 +134,77 @@ dev.off()
 
 ![](fig/dong_casting_g.png)
 
+# 지도 {#cartography}
 
+
+```{r cartography, eval = FALSE}
+library(sf)
+library(geogrid)
+library(tilemaps)
+
+
+# 1. 지도 ------------------
+## 1.1. 행정구역(SHP) 지도 ----------
+
+sigungu_sf_raw <- sf::st_read("../../docs/election_map/data/map/SIG_202101/TL_SCCO_SIG.shp")
+
+sungnam_code <- sigungu_sf_raw %>% 
+  mutate(SIG_KOR_NM = iconv(SIG_KOR_NM, from = "CP949", to = "UTF-8", toRaw = FALSE)) %>% 
+  filter(str_detect(SIG_KOR_NM, "성남") ) %>% 
+  pull(SIG_CD)
+  
+emd_sf_raw <- sf::st_read("../../docs/election_map/data/map/EMD_202101/TL_SCCO_EMD.shp")
+
+sungnam_sf <- emd_sf_raw %>% 
+  mutate(EMD_KOR_NM = iconv(EMD_KOR_NM, from = "CP949", to = "UTF-8", toRaw = FALSE)) %>% 
+  mutate(SIG_CD = str_sub(EMD_CD, 1, 5)) %>% 
+  filter(SIG_CD %in% sungnam_code) %>% 
+  st_simplify(dTolerance = 100, preserveTopology = TRUE)
+
+
+pryr::object_size(sungnam_sf)
+
+plot(sungnam_sf)
+
+# 2. 시군구 타일 지도 ------------------
+
+## 2.1. geogrid --------------
+library(geogrid)
+
+sungnam_hex <- calculate_grid(shape = sungnam_sf, grid_type = "hexagonal", seed = 3)
+sungnam_hex_map <- assign_polygons(sungnam_sf, sungnam_hex)
+
+
+sungnam_hex_map_raw <- sungnam_hex_map %>%
+  dplyr::select(EMD_KOR_NM) %>% 
+  mutate(EMD_KOR_NM = stringi::stri_escape_unicode(EMD_KOR_NM))
+
+
+sungnam_hex_map_raw %>%
+  st_write("data/tilemap/sungnam_hex_map_raw.shp",
+           delete_layer=TRUE, overwrite=TRUE)
+
+```
+
+
+
+# 지도 + 데이터 {#cartography-data}
+
+
+```{r read-sf}
+sungnam_hex_map_raw <- 
+  st_read("data/tilemap/sungnam_hex_map_raw.shp") %>% 
+  mutate(EMD_KOR_NM = stringi::stri_unescape_unicode(EMD_KOR_NM))
+
+dong_casting_tbl %>% 
+  filter(연도 == 2022) %>% 
+  right_join(sungnam_hex_map_raw, by = c("읍면동명" = "EMD_KOR_NM")) %>% 
+  filter(!is.na(선거인수)) %>% 
+  ggplot() +
+    geom_sf(aes(geometry = geometry, fill = 투표율)) +
+    geom_sf_text(aes(geometry = geometry, label = glue::glue("{읍면동명}\n{scales::percent(투표율, accuracy = 0.1)}")),
+               fun.geometry = function(x) st_centroid(x)) +
+  theme_void()
+
+```
 
