@@ -32,9 +32,16 @@ knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,
 library(tidyverse)
 library(rvest)
 library(lubridate)
+library(ggrepel)
 ```
 
 # 데이터 {#local-data}
+
+- 성남시
+    - 전체
+    - 3구
+    - 동
+    - 투표소(?)
 
 ## 투표율 {#local-data-casting}
 
@@ -122,14 +129,25 @@ sn_voting_pcnt
 
 ## 투표율 {#sungnam-casting}
 
-```{r sungam-casting, eval = FALSE}
+
+```{r sungam-casting-overall, eval = FALSE}
 library(ggrepel)
 
+sn_casting_total <- sn_casting_raw %>% 
+  group_by(연도) %>% 
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  ungroup() %>% 
+  mutate(투표율 = 투표수 / 선거인수) %>% 
+  mutate(구시군명 = "전체")
+
 sn_casting_g <- sn_casting %>% 
+  bind_rows(sn_casting_total) %>% 
   mutate(구시군명 = str_remove(구시군명, "성남시")) %>% 
-  ggplot(aes(x = 연도, y = 투표율, color = 구시군명, group = 구시군명)) +
-    geom_line() +
-    geom_point(size = 5) +
+  mutate(구시군명 = factor(구시군명, levels = c("전체", "분당구", "수정구", "중원구"))) %>% 
+  ggplot(aes(x = 연도, y = 투표율, group = 구시군명)) +
+    geom_line(aes(color = 구시군명)) +
+    geom_point(aes(color = 구시군명), size = 5) +
     scale_y_continuous(labels = scales::percent) +
     labs(x="",
          title = "성남시 대통령선거 투표율") +
@@ -147,7 +165,11 @@ sn_casting_g <- sn_casting %>%
       strip.background=element_rect(fill="gray95"),
       plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
       plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen")) +
-    geom_text_repel(aes(label = scales::percent(투표율, accuracy =0.1)), hjust = 1, size = 5 )
+      geom_text_repel(aes(label = scales::percent(투표율, accuracy =0.1)), hjust = 1, size = 5 ) +
+      scale_color_manual(values = c("전체"   = "black",
+                                    "분당구" = "red",
+                                    "수정구" = "blue",
+                                    "중원구" = "green"))  
 
 sn_casting_g
 
@@ -159,9 +181,54 @@ dev.off()
 
 ![](fig/sn_casting_g.png)
 
-## 득표수 
+
+## 득표수  {#sn-votes}
+
 
 ```{r sungam-voting-count, eval = FALSE}
+sn_voting_count_overall_g <- sn_voting %>% 
+  group_by(연도, 정당) %>% 
+  summarise(득표수 = sum(득표수)) %>% 
+  ggplot(aes(x = 연도, y = 득표수, color = 정당, group = 정당)) +
+    geom_point() +
+    geom_line() +
+    geom_point(size = 5) +
+    scale_y_continuous(labels = scales::comma) +
+    labs(x="",
+         title = "성남시 대통령선거 득표수",
+         caption = "2017년 대선 국민의힘 득표수 = 홍준표 + 안철수 + 유승민") +
+         theme_bw(base_family = "NanumBarunPen") +
+    theme(
+      text = element_text(family = "NanumGothic"),
+      plot.tag.position = c(0.85, .97),
+      legend.position = "top",
+      legend.title=element_text(size=15), 
+      legend.text=element_text(size=13),
+      axis.title.y = element_text(size = rel(1.5), colour = "black", family = "NanumBarunpen", face="bold"),      
+      strip.text.x = element_text(size = rel(2.5), colour = "black", family = "NanumBarunpen", face="bold"),
+      axis.text.y = element_text(size = rel(1.5), colour = "gray35", family = "NanumBarunpen", face="bold"),
+      axis.text.x = element_text(size = rel(1.4), colour = "black", family = "NanumBarunpen", face="bold"),
+      strip.background=element_rect(fill="gray95"),
+      plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
+      plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen"))  +
+    geom_text_repel(aes(label = scales::comma(득표수)), size = 5 ) +
+      scale_color_manual(values = c("국민의힘" = "red",
+                                    "민주당" = "blue",
+                                    "정의당" = "green"))
+
+sn_voting_count_overall_g
+
+ragg::agg_png("fig/sn_voting_count_overall_g", width = 297, height = 210, units = "mm", res = 300, scaling = 0.7)
+sn_voting_count_overall_g
+dev.off()
+
+```
+
+![](fig/sn_voting_count_overall_g)
+
+### 3구 {#sn-votes-overall-three}
+
+```{r sungam-voting-count-three, eval = FALSE}
 
 sn_voting_count_g <- sn_voting %>% 
   ggplot(aes(x = 연도, y = 득표수, color = 정당, group = 정당)) +
@@ -204,7 +271,57 @@ dev.off()
 
 ## 득표율 {#sn-voting-rate}
 
-```{r sungam-voting-rate, eval = FALSE}
+### 성남시 전체 {#sn-voting-rate-overall}
+
+```{r sungam-voting-rate-overall, eval = FALSE}
+
+sn_voting_pcnt_overall_g <- sn_voting_pcnt %>% 
+  group_by(연도, 정당) %>% 
+  summarise(득표수 = sum(득표수),
+            투표수 = sum(투표수)) %>% 
+  ungroup() %>% 
+  mutate(득표율 = 득표수 / 투표수) %>% 
+  ggplot(aes(x = 연도, y = 득표율, color = 정당, group = 정당)) +
+    geom_point() +
+    geom_line() +
+    geom_point(size = 5) +
+    scale_y_continuous(labels = scales::percent) +
+    labs(x="",
+         title = "성남시 대통령선거 득표율",
+         caption = "2017년 대선 국민의힘 득표율(%) = 홍준표 + 안철수 + 유승민") +
+         theme_bw(base_family = "NanumBarunPen") +
+    theme(
+      text = element_text(family = "NanumGothic"),
+      plot.tag.position = c(0.85, .97),
+      legend.position = "top",
+      legend.title=element_text(size=15), 
+      legend.text=element_text(size=13),
+      axis.title.y = element_text(size = rel(1.5), colour = "black", family = "NanumBarunpen", face="bold"),      
+      strip.text.x = element_text(size = rel(2.5), colour = "black", family = "NanumBarunpen", face="bold"),
+      axis.text.y = element_text(size = rel(1.5), colour = "gray35", family = "NanumBarunpen", face="bold"),
+      axis.text.x = element_text(size = rel(1.4), colour = "black", family = "NanumBarunpen", face="bold"),
+      strip.background=element_rect(fill="gray95"),
+      plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
+      plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen"))  +
+    geom_text_repel(aes(label = scales::percent(득표율, accuracy = 0.1)), size = 5 ) +
+      scale_color_manual(values = c("국민의힘" = "red",
+                                    "민주당" = "blue",
+                                    "정의당" = "green"))
+
+sn_voting_pcnt_overall_g
+
+ragg::agg_png("fig/sn_voting_pcnt_overall_g.png", width = 297, height = 210, units = "mm", res = 300, scaling = 0.7)
+sn_voting_pcnt_overall_g
+dev.off()
+
+```
+
+![](fig/sn_voting_pcnt_overall_g.png)
+
+
+### 3구 {#sn-voting-rate-three}
+
+```{r sungam-voting-rate-three, eval = FALSE}
 
 sn_voting_pcnt_g <- sn_voting_pcnt %>% 
   ggplot(aes(x = 연도, y = 득표율, color = 정당, group = 정당)) +
@@ -240,7 +357,8 @@ sn_voting_pcnt_g
 ragg::agg_png("fig/sn_voting_pcnt_g.png", width = 297, height = 210, units = "mm", res = 300, scaling = 0.7)
 sn_voting_pcnt_g
 dev.off()
-
 ```
 
 ![](fig/sn_voting_pcnt_g.png)
+
+
