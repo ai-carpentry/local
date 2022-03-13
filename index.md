@@ -19,7 +19,7 @@ subtitle: 지방선거 2022년
 
 ## 학습목차 
 
-1. [성남시](local-sungam.html)
+1. [성남시](local-sungnam.html)
     
     
     
