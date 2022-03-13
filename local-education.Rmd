@@ -1,0 +1,115 @@
+---
+layout: page
+title: "제8회 지방선거 2022년"
+subtitle: "서울교육감"
+author:
+- name: "이광춘"
+  affiliation: "[Tidyverse Korea](https://www.facebook.com/groups/tidyverse/)"
+date: "`r Sys.Date()`"
+tags: ["지방선거", "지선"]
+output:
+  html_document: 
+    include:
+      after_body: footer.html
+      before_body: header.html
+      in_header: google_analytics.html
+    toc: yes
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+    code_folding: hide
+    number_section: true
+    self_contained: true
+urlcolor: blue
+linkcolor: blue
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,
+                      comment="", digits = 3, tidy = FALSE, prompt = FALSE, fig.align = 'center')
+library(tidyverse)
+library(rvest)
+library(lubridate)
+library(testthat)
+```
+
+# 데이터 {#edu-data}
+
+## 데이터 가져오기 {#edu-data-get}
+
+```{r education-data}
+
+seoul_2018 <- krvote::local_edu_20180613 %>% 
+  filter(시도명 == "서울특별시") %>% 
+  pull(data) %>% 
+  .[[1]] %>% 
+  select(!starts_with("na")) %>% 
+  pivot_longer(선거인수:기권수, names_to = "후보", values_to = "득표수") %>% 
+  mutate(선거 = "2018")
+
+seoul_2014 <- krvote::local_edu_seoul_20140604 %>% 
+  unnest(data) %>% 
+  pivot_longer(선거인수:기권수, names_to = "후보", values_to = "득표수") %>% 
+  mutate(시도명 = "서울특별시") %>% 
+  rename(구시군명 = 시군구명) %>% 
+  relocate(시도명, .before = 구시군명) %>% 
+  mutate(선거 = "2014")
+
+edu_seoul <- bind_rows(seoul_2014, seoul_2018) %>% 
+  relocate(선거, .before = 시도명) %>% 
+  filter(! 구분 %in% c("합계", "소계") )  %>% 
+  mutate(후보 = str_remove(후보, "_"))
+  
+
+edu_seoul
+
+```
+
+
+## 데이터 점검 {#edu-data-check}
+
+
+
+```{r edu-data-check}
+
+test_that("지선 교육감 후보득표검증", {
+
+  edu_seoul_check <- edu_seoul %>% 
+    group_by(선거, 시도명, 후보) %>% 
+    summarise(득표수 = sum(득표수)) %>% 
+    ungroup() %>% 
+    pivot_wider(names_from = 선거, values_from = 득표수)
+
+  ## 득표수
+  expect_that( edu_seoul_check %>% filter(후보 == "조희연") %>% pull(`2014`), equals( parse_number("1,894,872")) )
+  expect_that( edu_seoul_check %>% filter(후보 == "조희연") %>% pull(`2018`), equals( parse_number("2,271,413")) )
+
+})
+
+
+```
+
+
+# 시각화 {#edu-viz}
+
+## 후보 {#edu-viz-hubo}
+
+
+```{r edu-viz-hubo}
+edu_seoul_viz <- edu_seoul %>% 
+  group_by(선거, 구시군명, 후보) %>% 
+  summarise(득표수 = sum(득표수)) %>% 
+  ungroup() %>% 
+  # pivot_wider(names_from = 선거, values_from = 득표수, values_fill = 0) %>% 
+  filter(! 후보 %in% c("계", "기권수", "무효투표수", "선거인수", "투표수" ))
+
+edu_seoul_viz %>% 
+  ggplot(aes(x = fct_reorder(구시군명, 득표수), y=득표수, fill = 후보)) +
+    geom_col(position = "dodge")  +
+    facet_wrap(~선거, scales ="free") +
+    coord_flip()
+
+```
+
