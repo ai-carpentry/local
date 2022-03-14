@@ -1,0 +1,142 @@
+---
+layout: page
+title: "제8회 지방선거 2022년"
+subtitle: "행정지도 데이터 SHP 마스터 코드"
+author:
+- name: "이광춘"
+  affiliation: "[Tidyverse Korea](https://www.facebook.com/groups/tidyverse/)"
+date: "`r Sys.Date()`"
+tags: ["지방선거", "지선"]
+output:
+  html_document: 
+    include:
+      after_body: footer.html
+      before_body: header.html
+      in_header: google_analytics.html
+    toc: yes
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+    code_folding: hide
+    number_section: true
+    self_contained: true
+urlcolor: blue
+linkcolor: blue
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,
+                      comment="", digits = 3, tidy = FALSE, prompt = FALSE, fig.align = 'center')
+library(tidyverse)
+library(rvest)
+library(lubridate)
+library(ggrepel)
+library(sf)
+library(geogrid)
+library(tilemaps)
+
+```
+
+# 지도 마스터 코드 {#master-code}
+
+## .시도 시군구 코드 {#master-code-sido-sigungu}
+
+```{r map-master-code}
+
+### 시도
+
+sido_sf_raw <- sf::st_read("../../docs/election_map/data/map/CTPRVN_202101/TL_SCCO_CTPRVN.shp")
+
+sido_code_tbl <- sido_sf_raw %>% 
+  mutate(CTP_KOR_NM = iconv(CTP_KOR_NM, from = "CP949", to = "UTF-8", toRaw = FALSE)) %>% 
+  select(CTPRVN_CD, CTP_KOR_NM) %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+sido_code_tbl 
+  
+
+### 시군구
+
+sigungu_sf_raw <- sf::st_read("../../docs/election_map/data/map/SIG_202101/TL_SCCO_SIG.shp")
+
+sigungu_code_tbl <- sigungu_sf_raw %>% 
+  mutate(SIG_KOR_NM = iconv(SIG_KOR_NM, from = "CP949", to = "UTF-8", toRaw = FALSE)) %>% 
+  select( SIG_CD, SIG_KOR_NM) %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+sigungu_code_tbl
+
+### 읍면동
+
+emd_sf_raw <- sf::st_read("../../docs/election_map/data/map/EMD_202101/TL_SCCO_EMD.shp")
+
+emd_code_tbl <- emd_sf_raw %>% 
+  mutate(EMD_KOR_NM = iconv(EMD_KOR_NM, from = "CP949", to = "UTF-8", toRaw = FALSE)) %>% 
+  select( EMD_CD, EMD_KOR_NM) %>% 
+  st_drop_geometry() %>% 
+  as_tibble()
+
+emd_code_tbl
+
+## 코드 정리: 시도-시군구 --------------------
+
+sido_sigungu_code_tbl <- sigungu_code_tbl %>% 
+  mutate(CTPRVN_CD = str_sub(SIG_CD, 1, 2)) %>% 
+  left_join(sido_code_tbl) %>% 
+  group_by(CTPRVN_CD, CTP_KOR_NM) %>% 
+  nest() %>% 
+  ungroup()
+
+sido_sigungu_code_tbl
+
+```
+
+
+## .시군구 읍면동 코드 {#master-code-sigungu-emd}
+
+```{r map-master-code-emd}
+
+sigungu_emd_code_tbl <- emd_code_tbl %>% 
+  mutate(SIG_CD = str_sub(EMD_CD, 1, 5)) %>% 
+  left_join(sigungu_code_tbl) %>% 
+  group_by(SIG_CD, SIG_KOR_NM) %>% 
+  nest() %>% 
+  ungroup()
+  
+sigungu_emd_code_tbl
+```
+
+
+## .시도 시군구 읍면동 코드 {#master-code-sido-sigungu-emd}
+
+```{r map-master-sido-sgg-emd, eval = FALSE}
+
+SHP_code <- sido_sigungu_code_tbl %>% 
+  unnest(data) %>% 
+  left_join(sigungu_emd_code_tbl) %>% 
+  unnest(data)
+
+SHP_code %>% 
+  write_rds("data/SHP_code.rds")
+
+SHP_code %>% 
+  write_csv("data/SHP_code.csv")
+
+```
+
+
+# 실제 결과 {#map-result}
+
+```{r map-result}
+SHP_code <- 
+  read_rds("data/SHP_code.rds")
+
+SHP_code
+
+```
+
+
