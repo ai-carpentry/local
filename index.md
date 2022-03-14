@@ -22,7 +22,7 @@ subtitle: 지방선거 2022년
 1. [성남시](local-sungnam.html)
     1. [성남시-3구-동](local-sungnam-dong.html)
 1. [서울교육감](local-education.html)
-    
+1. [제7회 지선 경기도 구시군의장](local-gg-sgg.html)    
     
     
 
