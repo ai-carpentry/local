@@ -1,0 +1,284 @@
+---
+layout: page
+title: "제8회 지방선거 2022년"
+subtitle: "제20대 대통령선거 사전투표"
+author:
+- name: "이광춘"
+  affiliation: "[Tidyverse Korea](https://www.facebook.com/groups/tidyverse/)"
+date: "`r Sys.Date()`"
+tags: ["지방선거", "지선"]
+output:
+  html_document: 
+    include:
+      after_body: footer.html
+      before_body: header.html
+      in_header: google_analytics.html
+    toc: yes
+    toc_depth: 2
+    toc_float: true
+    highlight: tango
+    code_folding: hide
+    number_section: true
+    self_contained: true
+urlcolor: blue
+linkcolor: blue
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message=FALSE, warning=FALSE,
+                      comment="", digits = 3, tidy = FALSE, prompt = FALSE, fig.align = 'center')
+library(tidyverse)
+library(rvest)
+library(lubridate)
+library(ggrepel)
+library(sf)
+library(geogrid)
+library(tilemaps)
+```
+
+# .사전 투표율 {#local-gg-data}
+
+
+```{r early-voting, eval = FALSE}
+
+## 원본 데이터 가져오기-------------
+
+nec_early_voting <- krvote::early_voting %>% 
+  janitor::clean_names(ascii = FALSE) %>% 
+  mutate(across(선거인수:사전투표율, parse_number)) %>% 
+  filter(투표일 == "0") %>% 
+  group_by(선거코드) %>%  
+  summarise(선거인수 = sum(선거인수),
+            사전투표자수 = sum(사전투표자수) ) %>% 
+  mutate(사전투표율 = 사전투표자수 / 선거인수)
+  
+advance_vote_tbl
+
+
+nec_early_voting_tbl <- nec_early_voting %>% 
+  mutate(유형 = case_when( str_detect(선거코드, "20160413|20200415") ~ "총선",
+                           str_detect(선거코드, "20180613") ~ "지선",
+                           str_detect(선거코드, "20170509") ~ "대선")) %>% 
+  mutate(전후 = case_when(str_detect(선거코드, "20180613") & str_detect(유형, "지선") ~ "두번째",
+                          str_detect(선거코드, "20160413") & str_detect(유형, "총선") ~ "첫번째",
+                          str_detect(선거코드, "20200415") & str_detect(유형, "총선") ~ "두번째",
+                          str_detect(선거코드, "20170509") & str_detect(유형, "대선") ~ "첫번째")) %>% 
+  select(유형, 전후, 사전투표율) %>% 
+  add_row("유형" = "지선", "전후" = "첫번째", "사전투표율" = 11.49 / 100) %>% 
+  add_row("유형" = "대선", "전후" = "두번째", "사전투표율" = 36.93 / 100) %>% 
+  group_by(유형) %>% 
+  mutate(차이 = abs(diff(사전투표율)) ) %>% 
+  arrange(유형) %>% 
+  ungroup() %>% 
+  mutate(paired = rep(1:(n()/2), each = 2)) %>% 
+  mutate(전후 = factor(전후, levels = c("첫번째", "두번째"))) 
+
+nec_early_voting_tbl
+
+advance_vote_president_g <- nec_early_voting_tbl %>% 
+  mutate(유형 = factor(유형, levels = c("대선", "총선", "지선")) %>% fct_rev) %>% 
+  ggplot(aes(x = 유형, y = 사전투표율)) +
+    geom_point() +
+    geom_line(aes(group = paired, color = 유형), size = 2)+
+    geom_point(aes(shape = 유형), size=3 ) +
+    coord_flip() +
+    scale_y_continuous(labels = scales::percent) +
+    theme_bw(base_family = "NanumBarunPen") +
+    theme(legend.position = "top",
+          legend.title=element_text(size=19), 
+          legend.text=element_text(size=13),
+          strip.text.x = element_text(size = rel(1.5), colour = "black", face="bold"),
+          strip.text.y = element_text(size = rel(1.5), colour = "black", face="bold"),
+          axis.text.y = element_text(size = rel(1.7), colour = "gray35", face="bold", 
+                                     margin = margin(t = 0, r = 0, b = 0, l = 00)),
+          axis.text.x = element_text(size = rel(1.7), angle = 0,  vjust = 0.5, colour = "black",  face="bold"),
+          axis.title.x = element_text(size = rel(2.0), angle = 0,  vjust = 0.5, colour = "black",  face="bold"),
+          strip.background=element_rect(fill="gray95"),
+          plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
+          plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen"))  +
+  labs(x = "",
+       y = "사전선거 투표비율 (%)",
+       color = "선거명",
+       shape = "선거구분",
+       title = "주요선거 사전투표 - 종합",
+       caption = "데이터 출처: 공공데이터포털 중앙선거관리위원회") +
+  geom_text(aes(label = scales::percent(사전투표율, accuracy = 0.1)), vjust = -1.0, size = 4) +
+  geom_text(data = nec_early_voting_tbl %>% filter(전후 == "첫번째") %>% mutate(show_value = 사전투표율 + 차이/2), 
+            aes(x = 유형, y =  show_value, label = scales::percent( 차이 ), color = 유형), vjust = -1.0, size = 7, 
+            show.legend = FALSE)
+
+advance_vote_president_g
+
+ragg::agg_png(glue::glue("fig/advance_vote_president_g.png"), width = 297, height = 210, units = "mm", res = 600)
+advance_vote_president_g
+dev.off()
+
+```
+
+
+![](fig/advance_vote_president_g.png)
+
+
+# .구시군 {#local-gg-data-early-voting}
+
+## 면적 지도 {#local-gg-data-gusign-map}
+
+```{r early-voting-map-area}
+## 읍면동 지도 ----------------------
+precinct_raw <- st_read("data/tilemap/HangJeongDong_ver20220309.geojson")
+
+orignal_map_g <- precinct_raw %>% 
+  select(ELEC_GU) %>% 
+  ggplot() +
+    geom_sf(aes(geometry = geometry)) +
+    theme_void() +
+    labs(title = "동별 원지도 선거구")
+
+pryr::object_size(precinct_raw)
+
+## 선거구 지도 ----------------------
+
+precinct_map <- precinct_raw %>% 
+  group_by(ELEC_SIDO, ELEC_GU) %>% 
+  summarise(geometry = sf::st_union(geometry)) %>% 
+  ungroup()
+
+precinct_map_g <- precinct_map %>% 
+  ggplot() +
+    geom_sf(aes(geometry = geometry)) +
+    theme_void() +
+    labs(title = "선거구 지도")
+
+pryr::object_size(precinct_map)
+
+
+## 선거구 지도 단순화 ----------------------
+
+precinct_map_simplified <- rmapshaper::ms_simplify(precinct_map)
+
+precinct_map_simplified_g <- precinct_map_simplified %>% 
+  ggplot() +
+    geom_sf(aes(geometry = geometry)) +
+    theme_void() +
+    labs(title = "선거구 지도 단순화")
+
+
+pryr::object_size(precinct_map_simplified)
+
+## 지도 비교 ------------------------------
+library(patchwork)
+
+orignal_map_g + precinct_map_g + precinct_map_simplified_g
+
+```
+
+## 인구비례 지도 {#local-gg-data-gusign-map-hexmap}
+
+```{r early-voting-map-hex}
+library(rmapshaper)
+library(tictoc)
+
+## 제주도 제외 ------------------------
+
+island_map <- precinct_map_simplified %>% 
+  filter(!str_detect(ELEC_SIDO, "제주")   ) %>% 
+  ms_filter_islands(min_area = 50000000)
+
+island_map  ## 248
+
+
+## 육각형 지도 ------------------------
+
+## 시간이 오래걸림 
+tic()
+precinct_no_jeju_hex <- calculate_grid(shape = island_map, grid_type = "hexagonal", seed = 777)
+precinct_no_jeju_raw <- assign_polygons(island_map, precinct_no_jeju_hex)
+toc()
+
+precinct_no_jeju_raw %>% 
+  mutate(ELEC_GU = stringi::stri_escape_unicode(ELEC_GU),
+         ELEC_SIDO = stringi::stri_escape_unicode(ELEC_SIDO)) %>% 
+  st_write("data/tilemap/precinct_map.shp",
+           delete_layer=TRUE, overwrite=TRUE)
+
+```
+
+
+
+```{r test-hex-map}
+precinct_map <- 
+  st_read("data/tilemap/precinct_map.shp") %>% 
+    mutate(ELEC_GU = stringi::stri_unescape_unicode(ELEC_GU),
+           ELEC_SIDO = stringi::stri_unescape_unicode(ELEC_SIDO)) 
+
+
+
+precinct_map %>%   
+  ggplot() +
+  geom_sf(aes(geometry = geometry, fill = ELEC_SIDO)) +
+  geom_sf_text(aes(geometry = geometry, label = glue::glue("{ELEC_SIDO}\n{ELEC_GU}") ),
+               fun.geometry = function(x) st_centroid(x), size = 3) +
+  theme_void()
+
+
+```
+
+## 인구비례 지도 {#local-gg-data-gusign-map-hexmap-jeju}
+
+
+```{r}
+## 강원
+precinct_kangwon <- precinct_map_simplified %>% 
+  filter(str_detect(ELEC_SIDO, "강원")) %>% 
+  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
+
+precinct_kangwon  %>% 
+  ggplot() +
+  geom_sf(aes(geometry = tile_map)) +
+  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
+               fun.geometry = function(x) st_centroid(x)) +
+  theme_void()
+
+## 경기
+precinct_gg <- precinct_map_simplified %>% 
+  filter(str_detect(ELEC_SIDO, "경기")) %>% 
+  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
+
+precinct_gg  %>% 
+  ggplot() +
+  geom_sf(aes(geometry = tile_map)) +
+  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
+               fun.geometry = function(x) st_centroid(x)) +
+  theme_void()
+
+
+## 수도권
+metro_gg <- precinct_map_simplified %>% 
+  filter(str_detect(ELEC_SIDO, "경기|서울")) %>% 
+  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
+
+metro_gg  %>% 
+  ggplot() +
+  geom_sf(aes(geometry = tile_map)) +
+  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
+               fun.geometry = function(x) st_centroid(x)) +
+  theme_void()
+
+
+
+# do.call(rbind, list(precinct_kangwon, precinct_gg)) %>% 
+# purrr::reduce(list(precinct_kangwon, precinct_gg), c) %>% 
+# st_nearest_feature(x = precinct_kangwon, y =  precinct_gg)   %>% 
+sf::st_line_merge(precinct_kangwon, precinct_gg)   %>% 
+  
+  ggplot() +
+  geom_sf(aes(geometry = tile_map)) +
+  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
+               fun.geometry = function(x) st_centroid(x)) +
+  theme_void()
+
+
+```
+
