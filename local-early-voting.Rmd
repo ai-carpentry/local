@@ -38,7 +38,7 @@ library(geogrid)
 library(tilemaps)
 ```
 
-# .사전 투표율 {#local-gg-data}
+# .역대 사전 투표율 {#local-gg-data}
 
 
 ```{r early-voting, eval = FALSE}
@@ -121,164 +121,161 @@ dev.off()
 ![](fig/advance_vote_president_g.png)
 
 
-# .구시군 {#local-gg-data-early-voting}
+# 제20대 대선 사전투표율 {#local-gg-data-gusign-early-voting}
 
-## 면적 지도 {#local-gg-data-gusign-map}
+## 시도 사전투표율 데이터 {#local-gg-data-gusign-early-voting-data}
 
-```{r early-voting-map-area}
-## 읍면동 지도 ----------------------
-precinct_raw <- st_read("data/tilemap/HangJeongDong_ver20220309.geojson")
+```{r early-voting-map-data3}
 
-orignal_map_g <- precinct_raw %>% 
-  select(ELEC_GU) %>% 
-  ggplot() +
-    geom_sf(aes(geometry = geometry)) +
-    theme_void() +
-    labs(title = "동별 원지도 선거구")
+presid_casting <- krvote::election_20220309$투표율
 
-pryr::object_size(precinct_raw)
+presid_casting_tbl <- presid_casting %>% 
+  group_by(시도명, 구시군명, 투표구명) %>% 
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  ungroup() %>% 
+  # filter(!str_detect(투표구명, "잘못")) %>% 
+  mutate(투표구명 = ifelse(str_detect(투표구명, "공관"), "재외투표", 투표구명)) %>% 
+  mutate(투표유형 = case_when(str_detect(투표구명, "선상투표|관외사전투표|재외투표|(잘못 투입)") ~ 투표구명,
+                              str_detect(투표구명, "관내사전투표") ~ "관내사전투표",
+                              TRUE ~ "본투표"))
 
-## 선거구 지도 ----------------------
-
-precinct_map <- precinct_raw %>% 
-  group_by(ELEC_SIDO, ELEC_GU) %>% 
-  summarise(geometry = sf::st_union(geometry)) %>% 
-  ungroup()
-
-precinct_map_g <- precinct_map %>% 
-  ggplot() +
-    geom_sf(aes(geometry = geometry)) +
-    theme_void() +
-    labs(title = "선거구 지도")
-
-pryr::object_size(precinct_map)
-
-
-## 선거구 지도 단순화 ----------------------
-
-precinct_map_simplified <- rmapshaper::ms_simplify(precinct_map)
-
-precinct_map_simplified_g <- precinct_map_simplified %>% 
-  ggplot() +
-    geom_sf(aes(geometry = geometry)) +
-    theme_void() +
-    labs(title = "선거구 지도 단순화")
-
-
-pryr::object_size(precinct_map_simplified)
-
-## 지도 비교 ------------------------------
-library(patchwork)
-
-orignal_map_g + precinct_map_g + precinct_map_simplified_g
-
-```
-
-## 인구비례 지도 {#local-gg-data-gusign-map-hexmap}
-
-```{r early-voting-map-hex}
-library(rmapshaper)
-library(tictoc)
-
-## 제주도 제외 ------------------------
-
-island_map <- precinct_map_simplified %>% 
-  filter(!str_detect(ELEC_SIDO, "제주")   ) %>% 
-  ms_filter_islands(min_area = 50000000)
-
-island_map  ## 248
-
-
-## 육각형 지도 ------------------------
-
-## 시간이 오래걸림 
-tic()
-precinct_no_jeju_hex <- calculate_grid(shape = island_map, grid_type = "hexagonal", seed = 777)
-precinct_no_jeju_raw <- assign_polygons(island_map, precinct_no_jeju_hex)
-toc()
-
-precinct_no_jeju_raw %>% 
-  mutate(ELEC_GU = stringi::stri_escape_unicode(ELEC_GU),
-         ELEC_SIDO = stringi::stri_escape_unicode(ELEC_SIDO)) %>% 
-  st_write("data/tilemap/precinct_map.shp",
-           delete_layer=TRUE, overwrite=TRUE)
-
-```
-
-
-
-```{r test-hex-map}
-precinct_map <- 
-  st_read("data/tilemap/precinct_map.shp") %>% 
-    mutate(ELEC_GU = stringi::stri_unescape_unicode(ELEC_GU),
-           ELEC_SIDO = stringi::stri_unescape_unicode(ELEC_SIDO)) 
-
-
-
-precinct_map %>%   
-  ggplot() +
-  geom_sf(aes(geometry = geometry, fill = ELEC_SIDO)) +
-  geom_sf_text(aes(geometry = geometry, label = glue::glue("{ELEC_SIDO}\n{ELEC_GU}") ),
-               fun.geometry = function(x) st_centroid(x), size = 3) +
-  theme_void()
-
-
-```
-
-## 인구비례 지도 {#local-gg-data-gusign-map-hexmap-jeju}
-
-
-```{r}
-## 강원
-precinct_kangwon <- precinct_map_simplified %>% 
-  filter(str_detect(ELEC_SIDO, "강원")) %>% 
-  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
-
-precinct_kangwon  %>% 
-  ggplot() +
-  geom_sf(aes(geometry = tile_map)) +
-  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
-               fun.geometry = function(x) st_centroid(x)) +
-  theme_void()
-
-## 경기
-precinct_gg <- precinct_map_simplified %>% 
-  filter(str_detect(ELEC_SIDO, "경기")) %>% 
-  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
-
-precinct_gg  %>% 
-  ggplot() +
-  geom_sf(aes(geometry = tile_map)) +
-  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
-               fun.geometry = function(x) st_centroid(x)) +
-  theme_void()
-
-
-## 수도권
-metro_gg <- precinct_map_simplified %>% 
-  filter(str_detect(ELEC_SIDO, "경기|서울")) %>% 
-  mutate(tile_map = generate_map(geometry, square = FALSE, flat_topped = TRUE))
-
-metro_gg  %>% 
-  ggplot() +
-  geom_sf(aes(geometry = tile_map)) +
-  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
-               fun.geometry = function(x) st_centroid(x)) +
-  theme_void()
-
-
-
-# do.call(rbind, list(precinct_kangwon, precinct_gg)) %>% 
-# purrr::reduce(list(precinct_kangwon, precinct_gg), c) %>% 
-# st_nearest_feature(x = precinct_kangwon, y =  precinct_gg)   %>% 
-sf::st_line_merge(precinct_kangwon, precinct_gg)   %>% 
+## 값 확인 --------------------
+presid_casting_tbl %>% 
+  group_by(투표유형) %>% 
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  mutate(사전투표율 = 투표수 / 선거인수) %>% 
+  summarise(선거인수 = sum(선거인수),
+            투표수 = sum(투표수))
   
-  ggplot() +
-  geom_sf(aes(geometry = tile_map)) +
-  geom_sf_text(aes(geometry = tile_map, label = ELEC_GU),
-               fun.geometry = function(x) st_centroid(x)) +
-  theme_void()
+#   선거인수   투표수
+#      <dbl>    <dbl>
+# 1 44197692 34067853
+
+```
+
+
+## 시도 사전투표율 시각화 {#local-gg-data-gusign-early-voting-data}
+
+```{r early-voting-map-data6}
+library(tidytext)
+
+sido_vote <- presid_casting_tbl %>% 
+  mutate(투표유형 = ifelse(str_detect(투표유형, "사전투표"), "관내외사전투표", 투표유형)) %>% 
+  filter(!str_detect(투표구명, "잘못")) %>%
+  group_by(시도명, 투표유형) %>%
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  mutate(투표율 = 투표수 / sum(선거인수) ) %>% 
+  ungroup() 
+
+sido_cating_g <- sido_vote %>% 
+  mutate(시도 = 시도명) %>% 
+  mutate(시도명 = reorder_within(x = 시도명, by = 투표율, within = 투표유형)) %>% 
+  filter(투표유형 %in% c("관내외사전투표", "본투표")) %>% 
+  mutate(투표유형 = factor(투표유형, levels = c("관내외사전투표", "본투표", "거소·선상투표", "재외투표"))) %>% 
+  ggplot(aes(x = fct_reorder(시도명, 투표율), y = 투표율  ) ) +
+    geom_point(show.legend = FALSE, aes(color = 시도), size = 3) +
+    geom_segment( aes(x=시도명, xend=시도명, y=0, yend=투표율, color = 시도)) +
+    facet_wrap(~투표유형, scales = "free_y") +
+    coord_flip() +
+    scale_x_reordered() +
+    scale_y_continuous(labels = scales::percent, limits = c(0, 0.55)) +
+    scale_color_manual(values = c("전라남도" = "blue",
+                                  "전라북도" = "blue",
+                                  "광주광역시" = "blue",
+                                  "대구광역시" = "red",
+                                  "경상북도" = "red",
+                                  "경기도"   = "black"
+                                 ) ) +
+    theme_minimal(base_family = "NanumBarunPen") +
+    theme(
+        text = element_text(family = "NanumGothic"),
+        plot.tag.position = c(0.85, .97),
+        legend.position = "none",
+        legend.title=element_text(size=15), 
+        legend.text=element_text(size=13),
+        strip.text.x = element_text(size = rel(1.3), colour = "black", family = "NanumBarunpen", face="bold"),
+        axis.text.y = element_text(size = rel(1.2), colour = "gray35", family = "NanumBarunpen", face="bold"),
+        axis.text.x = element_text(size = rel(1.2), colour = "black", family = "NanumBarunpen", face="bold"),
+        strip.background=element_rect(fill="gray95"),
+        plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
+        plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen"))  +
+    labs(x="",
+         y="투표율",
+         title = "제20대 대통령선거",
+         subtitle = "시도별 투표유형별 투표율") +
+    geom_text(aes(label = glue::glue("{scales::percent(투표율, accuracy = 0.1)}")), hjust = -0.3, size = 3.5 )
+
+sido_early_vote <- presid_casting_tbl %>% 
+  filter(!str_detect(투표구명, "잘못")) %>%
+  group_by(시도명, 투표유형) %>%
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  mutate(투표율 = 투표수 / sum(선거인수) ) %>% 
+  ungroup() 
+
+
+sido_early_cating_g <- sido_early_vote %>% 
+  mutate(시도 = 시도명) %>% 
+  mutate(시도명 = reorder_within(x = 시도명, by = 투표율, within = 투표유형)) %>% 
+  filter(str_detect(투표유형, "사전투표") ) %>% 
+  mutate(투표유형 = factor(투표유형, levels = c("관내사전투표", "관외사전투표"))) %>% 
+  ggplot(aes(x = fct_reorder(시도명, 투표율), y = 투표율  ) ) +
+    geom_point(show.legend = FALSE, aes(color = 시도), size = 3) +
+    geom_segment( aes(x=시도명, xend=시도명, y=0, yend=투표율, color = 시도)) +
+    facet_wrap(~투표유형, scales = "free") +
+    coord_flip() +
+    scale_x_reordered() +
+    scale_y_continuous(labels = scales::percent, limits = c(0, 0.50)) +
+    scale_color_manual(values = c("전라남도" = "blue",
+                                  "전라북도" = "blue",
+                                  "광주광역시" = "blue",
+                                  "대구광역시" = "red",
+                                  "경상북도" = "red",
+                                  "경기도"   = "black"
+                                 ) ) +
+    theme_minimal(base_family = "NanumBarunPen") +
+    theme(
+        text = element_text(family = "NanumGothic"),
+        plot.tag.position = c(0.85, .97),
+        legend.position = "none",
+        legend.title=element_text(size=15), 
+        legend.text=element_text(size=13),
+        strip.text.x = element_text(size = rel(1.3), colour = "black", family = "NanumBarunpen", face="bold"),
+        axis.text.y = element_text(size = rel(1.2), colour = "gray35", family = "NanumBarunpen", face="bold"),
+        axis.text.x = element_text(size = rel(1.2), colour = "black", family = "NanumBarunpen", face="bold"),
+        strip.background=element_rect(fill="gray95"),
+        plot.title=element_text(size=25, face="bold", family = "NanumBarunpen"),
+        plot.subtitle=element_text(face="bold", size=17, colour="grey10", family = "NanumBarunpen"))  +
+    labs(x="",
+         y="투표율")+
+    geom_text(aes(label = glue::glue("{scales::percent(투표율, accuracy = 0.1)}")), hjust = -0.2, size = 3.5 )
+
+library(patchwork)
+sido_cating_g / sido_early_cating_g
+
+
+ragg::agg_png(glue::glue("fig/advance_vote_president_sido_g.png"), width = 297, height = 210, units = "mm", res = 600)
+sido_cating_g / sido_early_cating_g
+dev.off()
 
 
 ```
+
+
+## 성남시 사전투표율 데이터 {#local-gg-data-gusign-early-voting-sn}
+
+```{r early-voting-map-data2}
+
+presid_casting_tbl %>% 
+  filter( str_detect(구시군명, "성남")) %>% 
+  group_by(구시군명, 투표유형) %>% 
+  summarise(선거인수 = sum(선거인수),
+            투표수   = sum(투표수)) %>% 
+  mutate(투표율 = 투표수 / sum(선거인수) )
+
+```
+
 
