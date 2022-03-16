@@ -82,7 +82,7 @@ advance_vote_president_g <- nec_early_voting_tbl %>%
   ggplot(aes(x = 유형, y = 사전투표율)) +
     geom_point() +
     geom_line(aes(group = paired, color = 유형), size = 2)+
-    geom_point(aes(shape = 유형), size=3 ) +
+    geom_point(aes(shape = 전후), size=3 ) +
     coord_flip() +
     scale_y_continuous(labels = scales::percent) +
     theme_bw(base_family = "NanumBarunPen") +
